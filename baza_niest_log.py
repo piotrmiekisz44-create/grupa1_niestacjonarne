@@ -3,54 +3,57 @@ from supabase import create_client
 import pandas as pd
 import plotly.express as px
 
-# 1. Połączenie
+# 1. Połączenie z bazą
 @st.cache_resource
-def init_db():
+def init_connection():
     url = st.secrets["SUPABASE_URL"]
     key = st.secrets["SUPABASE_KEY"]
     return create_client(url, key)
 
-db = init_db()
+supabase = init_connection()
 
 # 2. Pobieranie danych
-def get_data():
+def load_data():
     try:
-        p_req = db.table("produkty").select("*, kategorie(nazwa)").execute()
-        k_req = db.table("kategorie").select("*").execute()
-        df_p = pd.DataFrame(p_req.data)
-        df_k = pd.DataFrame(k_req.data)
+        p = supabase.table("produkty").select("*, kategorie(nazwa)").execute()
+        k = supabase.table("kategorie").select("*").execute()
+        df_p = pd.DataFrame(p.data)
         if not df_p.empty:
             df_p['kat_nazwa'] = df_p['kategorie'].apply(lambda x: x['nazwa'] if isinstance(x, dict) else "Inne")
-        return df_p, df_k
-    except:
+        return df_p, pd.DataFrame(k.data)
+    except Exception as e:
+        st.error(f"Błąd bazy: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
-df_p, df_k = get_data()
+df_prod, df_kat = load_data()
 
-# 3. Interfejs
-st.title("📡 LOG-PRO Terminal")
+# 3. Interfejs Użytkownika
+st.title("📦 System LOG-PRO")
 
-menu = st.sidebar.radio("Nawigacja", ["Dashboard", "Magazyn", "Ustawienia"])
+strona = st.sidebar.radio("MENU", ["Panel Główny", "Magazyn", "Konfiguracja"])
 
-if menu == "Dashboard":
-    if not df_p.empty:
+if strona == "Panel Główny":
+    if not df_prod.empty:
         c1, c2 = st.columns(2)
-        c1.metric("Suma SKU", len(df_p))
-        c2.metric("Suma Sztuk", int(df_p['liczba'].sum()))
+        c1.metric("Liczba SKU", len(df_prod))
+        c2.metric("Suma sztuk", int(df_prod['liczba'].sum()))
         
-        fig = px.pie(df_p, values='liczba', names='kat_nazwa', title="Podział zapasów")
-        st.plotly_chart(fig, use_container_width=True)
+        fig = px.pie(df_prod, names='kat_nazwa', values='liczba', title="Udział kategorii")
+        st.plotly_chart(fig)
     else:
-        st.info("Brak danych w bazie.")
+        st.info("Baza jest pusta.")
 
-elif menu == "Magazyn":
-    st.subheader("Lista towarów")
-    if not df_p.empty:
-        st.dataframe(df_p[['nazwa', 'kat_nazwa', 'liczba', 'ocena']], use_container_width=True)
-    
-    st.divider()
-    st.subheader("Dodaj nowy towar")
-    with st.form("dodaj"):
-        n = st.text_input("Nazwa")
-        k = st.selectbox("Kategoria", df_k['nazwa'].tolist() if not df_k.empty else ["Brak"])
-        l = st.number_input("
+elif strona == "Magazyn":
+    tab1, tab2 = st.tabs(["Lista", "Dodaj produkt"])
+    with tab1:
+        st.dataframe(df_prod[['nazwa', 'kat_nazwa', 'liczba', 'ocena']], use_container_width=True)
+        if not df_prod.empty:
+            if st.button("Usuń pierwszy produkt"):
+                supabase.table("produkty").delete().eq("id", df_prod.iloc[0]['id']).execute()
+                st.rerun()
+    with tab2:
+        with st.form("form_dodaj"):
+            n = st.text_input("Nazwa")
+            k = st.selectbox("Kategoria", df_kat['nazwa'].tolist() if not df_kat.empty else ["Brak"])
+            l = st.number_input("Ilość", min_value=1)
+            o = st.slider("Ocena jakości", 1, 5,
