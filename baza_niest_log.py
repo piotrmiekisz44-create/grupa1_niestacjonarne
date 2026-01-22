@@ -2,42 +2,20 @@ import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
 
-# --- KONFIGURACJA STRONY ---
-st.set_page_config(page_title="LOG-PRO COMMANDER", layout="wide")
+# 1. Konfiguracja i Połączenie
+st.set_page_config(page_title="LOG-PRO", layout="wide")
 
-# --- STYLE CSS (Uproszczone dla uniknięcia błędów składni) ---
-st.markdown("""
-    <style>
-    .stApp { background-color: #0e1117; color: white; }
-    h1, h2 { color: #00ff88 !important; font-family: 'Arial'; }
-    [data-testid="stMetric"] { 
-        background-color: #1f2937; 
-        border: 1px solid #00ff88; 
-        padding: 15px; 
-        border-radius: 10px; 
-    }
-    input, select { background-color: white !important; color: black !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- POŁĄCZENIE Z BAZĄ ---
 @st.cache_resource
 def init_db():
-    try:
-        url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_KEY"]
-        return create_client(url, key)
-    except Exception as e:
-        st.error(f"Błąd połączenia: {e}")
-        return None
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
 supabase = init_db()
 
-# --- POBIERANIE DANYCH ---
-def get_data():
-    if not supabase: return pd.DataFrame(), pd.DataFrame()
+# 2. Funkcje danych
+def load_data():
     try:
         p = supabase.table("produkty").select("*, kategorie(nazwa)").execute()
         k = supabase.table("kategorie").select("*").execute()
@@ -49,9 +27,38 @@ def get_data():
     except:
         return pd.DataFrame(), pd.DataFrame()
 
-df_prod, df_kat = get_data()
+df_p, df_k = load_data()
 
-# --- PASEK BOCZNY ---
-with st.sidebar:
-    st.title("🌐 LOG-PRO v3")
-    page = st.radio("NAWIGACJA", ["Dashboard", "Zasoby", "K
+# 3. Interfejs
+st.title("🌐 LOG-PRO: System Magazynowy")
+
+menu = ["Podsumowanie", "Zasoby", "Ustawienia"]
+choice = st.sidebar.selectbox("Menu", menu)
+
+if choice == "Podsumowanie":
+    if not df_p.empty:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Liczba SKU", len(df_p))
+        c2.metric("Suma sztuk", int(df_p['liczba'].sum()))
+        c3.metric("Śr. Jakość", f"{df_p['ocena'].mean():.1f}")
+        
+        st.subheader("Struktura zapasów")
+        fig = px.pie(df_p, values='liczba', names='kat_nazwa', hole=0.4)
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Baza danych jest pusta.")
+
+elif choice == "Zasoby":
+    tab1, tab2 = st.tabs(["Lista produktów", "Dodaj nowy"])
+    
+    with tab1:
+        if not df_p.empty:
+            st.dataframe(df_p[['nazwa', 'kat_nazwa', 'liczba', 'ocena']], use_container_width=True)
+            if st.button("Usuń zaznaczony (pierwszy z listy)"):
+                supabase.table("produkty").delete().eq("id", df_p.iloc[0]['id']).execute()
+                st.rerun()
+                
+    with tab2:
+        with st.form("add_p"):
+            name = st.text_input("Nazwa produktu")
+            kat = st.selectbox("Kategoria", df_k['nazwa'].tolist() if not df_k.empty else
