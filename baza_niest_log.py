@@ -18,9 +18,11 @@ def get_data():
         df_p = pd.DataFrame(prod_resp.data)
         df_k = pd.DataFrame(kat_resp.data)
         if not df_p.empty and 'kategorie' in df_p.columns:
+            # Wyciąganie nazwy kategorii z relacji JSON
             df_p['kat_nazwa'] = df_p['kategorie'].apply(lambda x: x['nazwa'] if isinstance(x, dict) else "Brak")
         return df_p, df_k
     except Exception as e:
+        st.error(f"Błąd danych: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
 df_prod, df_kat = get_data()
@@ -41,4 +43,5 @@ if not df_kat.empty:
                 l_prod = st.number_input("Ilość", min_value=0, step=1)
                 o_prod = st.slider("Ocena (0-5)", 0.0, 5.0, 4.0, 0.1)
             
-            submit = st.form_submit_button("Zapisz produkt w magazynie", use_container_width=True, type="
+            # POPRAWIONA LINIA 44:
+            submit = st.form_submit_button("Zapisz produkt w magazynie", use_container
