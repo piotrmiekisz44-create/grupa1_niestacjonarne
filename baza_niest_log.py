@@ -74,46 +74,4 @@ st.markdown("""
     /* SIDEBAR (MENU BOCZNE) - Głęboka czerń */
     [data-testid="stSidebar"] {
         background-color: #000000 !important;
-        border-right: 2px solid #00ff88;
-    }
-    
-    /* NAGŁÓWKI */
-    h1, h2, h3 { 
-        color: #00ff88 !important; 
-        text-transform: uppercase;
-        letter-spacing: 2px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- INICJALIZACJA BAZY ---
-@st.cache_resource
-def init_db():
-    try:
-        url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_KEY"]
-        return create_client(url, key)
-    except Exception as e:
-        st.error(f"Problem z połączeniem: {e}")
-        return None
-
-supabase = init_db()
-
-# --- POBIERANIE DANYCH ---
-@st.cache_data(ttl=5)
-def get_data():
-    if not supabase: 
-        return pd.DataFrame(), pd.DataFrame()
-    try:
-        p_res = supabase.table("produkty").select("*, kategorie(nazwa)").execute()
-        k_res = supabase.table("kategorie").select("*").execute()
-        df_p = pd.DataFrame(p_res.data)
-        df_k = pd.DataFrame(k_res.data)
-        
-        if not df_p.empty and 'kategorie' in df_p.columns:
-            df_p['kat_nazwa'] = df_p['kategorie'].apply(
-                lambda x: x['nazwa'] if isinstance(x, dict) else "Brak"
-            )
-        return df_p, df_k
-    except Exception:
-        return pd
+        border-right: 2px solid #00
