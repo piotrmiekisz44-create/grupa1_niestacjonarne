@@ -2,11 +2,12 @@ import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
 
-# 1. Konfiguracja strony
+# 1. Konfiguracja strony - Professional Look
 st.set_page_config(
-    page_title="Zarządzanie Magazynem", 
-    page_icon="📝", 
-    layout="wide"
+    page_title="Warehouse Intelligence Pro",
+    page_icon="🏢",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # Inicjalizacja klienta Supabase
@@ -14,7 +15,8 @@ url: str = st.secrets["SUPABASE_URL"]
 key: str = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
-# 2. Funkcja pobierania danych
+# 2. Funkcja pobierania danych (optymalizacja)
+@st.cache_data(ttl=60) # Odświeżanie cache co 60 sekund
 def get_data():
     try:
         p_res = supabase.table("produkty").select("*, kategorie(nazwa)").execute()
@@ -23,86 +25,92 @@ def get_data():
         df_k = pd.DataFrame(k_res.data)
         if not df_p.empty and 'kategorie' in df_p.columns:
             df_p['kat_nazwa'] = df_p['kategorie'].apply(
-                lambda x: x['nazwa'] if isinstance(x, dict) else "Brak"
+                lambda x: x['nazwa'] if isinstance(x, dict) else "Niezdefiniowana"
             )
         return df_p, df_k
-    except Exception as e:
+    except Exception:
         return pd.DataFrame(), pd.DataFrame()
 
 df_prod, df_kat = get_data()
 
-# --- PANEL GŁÓWNY ---
-st.title("➕ Dodaj nowy produkt")
+# --- SIDEBAR: NAWIGACJA I FILTRY ---
+with st.sidebar:
+    st.image("https://img.icons8.com/fluency/96/warehouse.png", width=80)
+    st.title("Menu Systemu")
+    menu = st.radio(
+        "Wybierz moduł:",
+        ["🏠 Pulpit Menadżera", "📦 Zarządzanie Produktami", "📁 Kategorie i Ustawienia"]
+    )
+    st.divider()
+    st.info("System połączony z bazą Supabase w chmurze.")
 
-if not df_kat.empty:
-    kat_map = {row['nazwa']: row['id'] for _, row in df_kat.iterrows()}
+# --- MODUŁ 1: PULPIT MENADŻERA (DASHBOARD) ---
+if menu == "🏠 Pulpit Menadżera":
+    st.title("📊 Inteligentny Pulpit Magazynowy")
     
-    with st.container(border=True):
-        with st.form("main_form", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                n_prod = st.text_input("Nazwa produktu")
-                k_prod = st.selectbox("Kategoria", options=list(kat_map.keys()))
-            with col2:
-                l_prod = st.number_input("Ilość", min_value=0, step=1)
-                o_prod = st.slider("Ocena", 0.0, 5.0, 4.0, 0.1)
-            
-            # ROZBITA LINIA (aby uniknąć błędu):
-            submit = st.form_submit_button(
-                label="Zapisz produkt w magazynie", 
-                use_container_width=True, 
-                type="primary"
-            )
-            
-            if submit:
-                if n_prod:
-                    supabase.table("produkty").insert({
-                        "nazwa": n_prod, 
-                        "liczba": l_prod, 
-                        "ocena": o_prod, 
-                        "kategoria_id": kat_map[k_prod]
-                    }).execute()
-                    st.success(f"Dodano: {n_prod}")
-                    st.rerun()
-else:
-    st.warning("Brak kategorii w bazie.")
-
-st.divider()
-
-# --- ZAKŁADKI ---
-t1, t2, t3 = st.tabs(["📋 Lista", "📊 Wykresy", "⚙️ Kategorie"])
-
-with t1:
     if not df_prod.empty:
-        df_v = df_prod[['nazwa', 'liczba', 'ocena', 'kat_nazwa']].copy()
-        df_v.columns = ['Produkt', 'Ilość', 'Ocena', 'Kategoria']
-        st.dataframe(df_v, use_container_width=True)
+        # Metryki na górze
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Asortyment", len(df_prod))
+        m2.metric("Suma zapasów", int(df_prod['liczba'].sum()))
+        m3.metric("Średnia ocena", f"{df_prod['ocena'].mean():.2f} ⭐")
+        low_stock = len(df_prod[df_prod['liczba'] < 5])
+        m4.metric("Niski stan (<5)", low_stock, delta=-low_stock, delta_color="inverse")
+
+        st.divider()
         
-        with st.expander("Usuń produkt"):
-            del_n = st.selectbox("Wybierz do usunięcia", df_prod['nazwa'].tolist())
-            if st.button("Potwierdź usunięcie"):
-                id_d = df_prod[df_prod['nazwa'] == del_n]['id'].values[0]
-                supabase.table("produkty").delete().eq("id", id_d).execute()
-                st.rerun()
-
-with t2:
-    if not df_prod.empty:
-        c_a, c_b = st.columns(2)
-        with c_a:
-            st.write("**Ilość w kategoriach**")
-            st.bar_chart(df_prod.groupby('kat_nazwa')['liczba'].sum())
-        with c_b:
-            st.write("**Średnie oceny**")
-            st.line_chart(df_prod.groupby('kat_nazwa')['ocena'].mean())
+        # Wykresy
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("📦 Struktura zapasów")
+            chart_data = df_prod.groupby('kat_nazwa')['liczba'].sum()
+            st.bar_chart(chart_data, color="#1f77b4")
+        
+        with c2:
+            st.subheader("⭐ Ranking jakości")
+            avg_rating = df_prod.groupby('kat_nazwa')['ocena'].mean()
+            st.area_chart(avg_rating, color="#ff7f0e")
+            
+        
     else:
-        st.info("Brak danych do wykresów.")
+        st.warning("Baza danych jest obecnie pusta. Dodaj pierwsze produkty.")
 
-with t3:
-    st.subheader("Nowa kategoria")
-    with st.form("k_form"):
-        nk = st.text_input("Nazwa")
-        ok = st.text_area("Opis")
-        if st.form_submit_button("Dodaj"):
-            if nk:
-                supabase.table("kategorie").insert({"nazwa": nk, "opis": ok}).execute()
-                st.rerun()
+# --- MODUŁ 2: ZARZĄDZANIE PRODUKTAMI ---
+elif menu == "📦 Zarządzanie Produktami":
+    st.title("📦 Kontrola Inwentarza")
+    
+    # Przycisk odświeżania
+    if st.button("🔄 Odśwież dane"):
+        st.cache_data.clear()
+        st.rerun()
+
+    tab_view, tab_add = st.tabs(["🔍 Przeglądaj i Usuń", "➕ Dodaj Nowy Produkt"])
+
+    with tab_view:
+        if not df_prod.empty:
+            # Wyszukiwarka
+            search = st.text_input("Szukaj produktu po nazwie...", "")
+            filtered_df = df_prod[df_prod['nazwa'].str.contains(search, case=False)]
+            
+            # Tabela
+            df_v = filtered_df[['nazwa', 'liczba', 'ocena', 'kat_nazwa']].copy()
+            df_v.columns = ['Produkt', 'Ilość (szt.)', 'Ocena Jakości', 'Kategoria']
+            st.dataframe(df_v, use_container_width=True, hide_index=True)
+
+            # Akcja usuwania
+            with st.expander("Panel usuwania produktów"):
+                del_prod = st.selectbox("Wybierz produkt do wycofania:", df_prod['nazwa'].tolist())
+                if st.button("🔴 Usuń trwale z magazynu", type="secondary"):
+                    id_to_del = df_prod[df_prod['nazwa'] == del_prod]['id'].values[0]
+                    supabase.table("produkty").delete().eq("id", id_to_del).execute()
+                    st.cache_data.clear()
+                    st.success(f"Produkt {del_prod} został pomyślnie usunięty.")
+                    st.rerun()
+        else:
+            st.info("Brak produktów do wyświetlenia.")
+
+    with tab_add:
+        if not df_kat.empty:
+            kat_map = {row['nazwa']: row['id'] for _, row in df_kat.iterrows()}
+            with st.form("professional_add_form"):
+                col_
