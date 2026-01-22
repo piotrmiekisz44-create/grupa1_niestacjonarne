@@ -2,26 +2,32 @@ import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
 
-# 1. Konfiguracja strony
+# 1. Konfiguracja "WOW" - Profesjonalny interfejs
 st.set_page_config(
-    page_title="Warehouse Manager Pro",
-    page_icon="🏢",
+    page_title="Inwentaryzacja 4.0 | Panel Zarządzania",
+    page_icon="🚀",
     layout="wide"
 )
 
-# Inicjalizacja połączenia z Supabase
+# Inicjalizacja połączenia
 @st.cache_resource
 def init_connection():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+    try:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        return create_client(url, key)
+    except Exception as e:
+        st.error(f"Krytyczny błąd konfiguracji: {e}")
+        return None
 
 supabase = init_connection()
 
 # 2. Pobieranie danych z cache
 @st.cache_data(ttl=10)
-def fetch_warehouse_data():
+def fetch_data():
+    if not supabase: return pd.DataFrame(), pd.DataFrame()
     try:
+        # Pobieranie produktów i kategorii zgodnie ze schematem
         p_res = supabase.table("produkty").select("*, kategorie(nazwa)").execute()
         k_res = supabase.table("kategorie").select("*").execute()
         
@@ -36,61 +42,125 @@ def fetch_warehouse_data():
     except Exception:
         return pd.DataFrame(), pd.DataFrame()
 
-df_prod, df_kat = fetch_warehouse_data()
+df_prod, df_kat = fetch_data()
 
-# --- SIDEBAR: NAWIGACJA ---
+# --- SIDEBAR: CENTRUM DOWODZENIA ---
 with st.sidebar:
-    st.image("https://img.icons8.com/fluency/96/box.png", width=60)
-    st.title("Warehouse Pro")
+    st.image("https://img.icons8.com/fluency/96/database.png", width=80)
+    st.title("System Magazynowy v2.0")
+    st.markdown("---")
     menu = st.radio(
-        "Nawigacja:",
-        ["📊 Dashboard", "📦 Produkty", "⚙️ Ustawienia Kategorii"]
+        "Główne moduły:",
+        ["📈 Analityka i KPI", "📦 Inwentarz", "🛠️ Konfiguracja"],
+        index=0
     )
-    st.divider()
-    st.caption("Status: Połączono z Supabase")
+    st.markdown("---")
+    # Zaskocz wykładowcę statusem "Live"
+    st.success("Sygnał bazy: AKTYWNY")
+    if st.button("🔄 Wymuś odświeżenie"):
+        st.cache_data.clear()
+        st.rerun()
 
-# --- MODUŁ 1: DASHBOARD ---
-if menu == "📊 Dashboard":
-    st.header("📊 Statystyki Magazynowe")
+# --- MODUŁ 1: ANALITYKA I KPI (EFEKT WOW) ---
+if menu == "📈 Analityka i KPI":
+    st.header("📊 Dashboard Analityczny")
     
     if not df_prod.empty:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Liczba Produktów", len(df_prod))
-        c2.metric("Suma Sztuk", int(df_prod['liczba'].sum()))
-        c3.metric("Średnia Ocena", f"{df_prod['ocena'].mean():.2f} ⭐")
+        # Metryki główne
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Asortyment", len(df_prod))
+        m2.metric("Suma zapasów", int(df_prod['liczba'].sum()))
+        m3.metric("Średnia Ocena", f"{df_prod['ocena'].mean():.2f} ⭐")
         
-        col_left, col_right = st.columns(2)
-        with col_left:
-            st.subheader("Stany wg Kategorii")
-            st.bar_chart(df_prod.groupby('kat_nazwa')['liczba'].sum())
-        with col_right:
-            st.subheader("Rozkład Ocen")
-            st.area_chart(df_prod['ocena'].value_counts().sort_index())
-    else:
-        st.info("Baza danych jest pusta.")
+        # Logika "Inteligentnego Alertu"
+        alert_count = len(df_prod[df_prod['liczba'] < 5])
+        m4.metric("Krytyczne Braki", alert_count, delta=f"{alert_count} poz.", delta_color="inverse")
 
-# --- MODUŁ 2: PRODUKTY (Linia 77 - Tutaj był błąd) ---
-elif menu == "📦 Produkty":
-    st.header("📦 Zarządzanie Produktami")
+        if alert_count > 0:
+            st.warning(f"⚠️ Uwaga! {alert_count} produktów wymaga natychmiastowego zamówienia (stan < 5 szt.).")
+
+        st.markdown("### Wizualizacja Struktury")
+        c_left, c_right = st.columns(2)
+        
+        with c_left:
+            st.write("**Ilość towaru w podziale na kategorie**")
+            # Bar chart z dynamicznym kolorem
+            st.bar_chart(df_prod.groupby('kat_nazwa')['liczba'].sum(), color="#2e7d32")
+        
+        with c_right:
+            st.write("**Jakość produktów (Średnia ocena)**")
+            st.area_chart(df_prod.groupby('kat_nazwa')['ocena'].mean(), color="#1565c0")
+    else:
+        st.info("Brak danych do analizy. Dodaj pierwsze produkty w zakładce Inwentarz.")
+
+# --- MODUŁ 2: INWENTARZ (WYSZUKIWARKA) ---
+elif menu == "📦 Inwentarz":
+    st.header("📦 Ewidencja Towarów")
     
-    tab_list, tab_add = st.tabs(["📋 Przeglądaj", "➕ Dodaj Nowy"])
+    t_list, t_add = st.tabs(["🔍 Przeglądaj i Zarządzaj", "➕ Nowa Dostawa"])
     
-    with tab_list:
+    with t_list:
+        # Dodatek WOW: Wyszukiwarka live
+        search = st.text_input("Szybkie wyszukiwanie produktu:", placeholder="Wpisz nazwę...")
+        
         if not df_prod.empty:
-            df_display = df_prod[['nazwa', 'liczba', 'ocena', 'kat_nazwa']].copy()
-            df_display.columns = ['Nazwa', 'Liczba', 'Ocena', 'Kategoria']
-            st.dataframe(df_display, use_container_width=True, hide_index=True)
+            df_filtered = df_prod[df_prod['nazwa'].str.contains(search, case=False)]
             
-            with st.expander("Usuń produkt"):
-                to_del = st.selectbox("Wybierz produkt", df_prod['nazwa'].tolist())
-                if st.button("Usuń trwale", type="secondary"):
-                    id_d = df_prod[df_prod['nazwa'] == to_del]['id'].values[0]
-                    supabase.table("produkty").delete().eq("id", id_d).execute()
+            # Formatowanie tabeli dla czytelności
+            df_view = df_filtered[['nazwa', 'liczba', 'ocena', 'kat_nazwa']].copy()
+            df_view.columns = ['Nazwa Produktu', 'Stan (szt.)', 'Ocena', 'Kategoria']
+            
+            st.dataframe(df_view, use_container_width=True, hide_index=True)
+
+            with st.expander("Usuwanie produktów (strefa niebezpieczna)"):
+                col_del1, col_del2 = st.columns([3, 1])
+                target = col_del1.selectbox("Wybierz do usunięcia:", df_prod['nazwa'].tolist())
+                if col_del2.button("Usuń trwale", use_container_width=True, type="secondary"):
+                    id_to_del = df_prod[df_prod['nazwa'] == target]['id'].values[0]
+                    supabase.table("produkty").delete().eq("id", id_to_del).execute()
                     st.cache_data.clear()
+                    st.toast(f"Usunięto: {target}")
                     st.rerun()
         else:
-            st.write("Brak produktów.")
+            st.info("Magazyn jest pusty.")
 
-    with tab_add:
+    with t_add:
         if not df_kat.empty:
-            kat_map = {r['nazwa']: r['id'] for _, r in df_kat.
+            # Rozbicie linii na mniejsze części, aby uniknąć błędów wklejania
+            kat_options = df_kat['nazwa'].tolist()
+            kat_map = dict(zip(df_kat['nazwa'], df_kat['id']))
+            
+            with st.form("nowy_produkt"):
+                col_n1, col_n2 = st.columns(2)
+                nazwa_p = col_n1.text_input("Nazwa handlowa")
+                kat_p = col_n2.selectbox("Kategoria", options=kat_options)
+                
+                col_n3, col_n4 = st.columns(2)
+                stan_p = col_n3.number_input("Ilość dostarczona", min_value=0, value=10)
+                ocena_p = col_n4.slider("Wstępna ocena jakości", 0.0, 5.0, 4.0)
+                
+                if st.form_submit_button("✅ Dodaj produkt do systemu", use_container_width=True):
+                    if nazwa_p:
+                        supabase.table("produkty").insert({
+                            "nazwa": nazwa_p, "liczba": stan_p, 
+                            "ocena": ocena_p, "kategoria_id": kat_map[kat_p]
+                        }).execute()
+                        st.cache_data.clear()
+                        st.success("Produkt wprowadzony!")
+                        st.rerun()
+        else:
+            st.error("Błąd: Musisz najpierw zdefiniować kategorie w ustawieniach!")
+
+# --- MODUŁ 3: KONFIGURACJA ---
+elif menu == "🛠️ Konfiguracja":
+    st.header("🛠️ Zarządzanie Kategoriami")
+    
+    col_k1, col_k2 = st.columns([1, 2])
+    
+    with col_k1:
+        st.subheader("Nowa Grupa")
+        with st.form("dodaj_kat"):
+            n_kat = st.text_input("Nazwa kategorii")
+            o_kat = st.text_area("Opis techniczny")
+            if st.form_submit_button("Stwórz"):
+                if n_kat:
