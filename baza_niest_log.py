@@ -1,111 +1,78 @@
 import streamlit as st
-from supabase import create_client, Client
+from supabase import create_client
 import pandas as pd
 import plotly.express as px
 
-# --- KONFIGURACJA STRONY ---
-st.set_page_config(
-    page_title="LOG-PRO: System Logistyczny", 
-    page_icon="🚢", 
-    layout="wide"
-)
+st.set_page_config(page_title="LOG-PRO 18", layout="wide")
 
-# --- STYLIZACJA CSS (ZAKCENTOWANE POLA TEKSTOWE) ---
-st.markdown("""
-    <style>
-    /* Tło i główny kontener */
-    .stApp {
-        background-image: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), 
-        url("https://images.unsplash.com/photo-1494412519320-aa613dfb7738?q=80&w=2070");
-        background-attachment: fixed;
-        background-size: cover;
-    }
+# --- 1. STYLIZACJA (CZARNE POLA I NEONY) ---
+st.markdown("""<style>
+.stApp {background:#000; color:#0f8;}
+[data-testid="stSidebar"] {background:#050505 !important; border-right:2px solid #0f8;}
+h1,h2,label,p,.stMetric {color:#0f8 !important; font-weight:900;}
+/* CZARNE POLA TEKSTOWE */
+input, textarea, div[data-baseweb="select"] > div {
+ background:#000 !important; color:#fff !important;
+ border:2px solid #0f8 !important; border-radius:8px !important;
+ font-weight:bold !important;
+}
+/* GIGANTYCZNE ŻÓŁTE PRZYCISKI */
+button {
+ background:#ff0 !important; color:#000 !important;
+ font-size:22px !important; font-weight:900 !important;
+ height:75px !important; border-radius:15px !important;
+ border:3px solid #0f8 !important; width:100% !important;
+}
+</style>""", unsafe_allow_html=True)
 
-    /* Panele i kontenery */
-    [data-testid="stSidebar"] {
-        background-color: #050505 !important;
-        border-right: 2px solid #00ff88;
-    }
-    
-    .main .block-container {
-        background-color: rgba(0, 0, 0, 0.92);
-        padding: 40px;
-        border-radius: 20px;
-        border: 1px solid rgba(0, 212, 255, 0.3);
-    }
-
-    /* Teksty ogólne */
-    html, body, [class*="st-"] {
-        font-family: 'Segoe UI', sans-serif;
-        color: #FFFFFF !important;
-    }
-
-    h1, h2, h3 { 
-        color: #00ff88 !important; 
-        text-transform: uppercase;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-    }
-
-    /* KLUCZOWE: Stylizacja pól tekstowych i liczbowych */
-    input, textarea, select, div[data-baseweb="select"] > div {
-        background-color: #000000 !important;
-        color: #FFFFFF !important;
-        border: 2px solid #00ff88 !important;
-        border-radius: 8px !important;
-        font-weight: bold !important;
-        font-size: 16px !important;
-    }
-
-    /* Stylizacja etykiet nad polami (Label) */
-    .stMarkdown p, label {
-        color: #00ff88 !important;
-        font-weight: 700 !important;
-        font-size: 1.1rem !important;
-    }
-
-    /* Fokus na polach (po kliknięciu) */
-    input:focus, textarea:focus {
-        border-color: #00d4ff !important;
-        box-shadow: 0 0 10px #00d4ff !important;
-    }
-
-    /* Metryki */
-    [data-testid="stMetric"] {
-        background: #111;
-        border: 2px solid #00ff88;
-        border-radius: 12px;
-        padding: 15px;
-    }
-
-    /* Przyciski */
-    .stButton>button {
-        background-color: #00ff88 !important;
-        color: #000000 !important;
-        font-weight: 900 !important;
-        border-radius: 10px !important;
-        border: none !important;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        background-color: #00d4ff !important;
-        transform: scale(1.02);
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- POŁĄCZENIE Z BAZĄ ---
+# --- 2. POŁĄCZENIE ---
 @st.cache_resource
-def init_db():
-    try:
-        url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_KEY"]
-        return create_client(url, key)
-    except Exception as e:
-        st.error(f"Błąd połączenia: {e}")
-        return None
+def init():
+ u, k = st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
+ return create_client(u, k)
 
-supabase = init_db()
+db = init()
 
-# --- POBIERANIE DANYCH ---
-@st.cache_data(ttl=5)
-def get_data():
+def load():
+ try:
+  p = db.table("produkty").select("*, kategorie(nazwa)").execute()
+  k = db.table("kategorie").select("*").execute()
+  df = pd.DataFrame(p.data)
+  if not df.empty:
+   df['kn'] = df['kategorie'].apply(lambda x: x['nazwa'] if isinstance(x, dict) else "Inne")
+  return df, pd.DataFrame(k.data)
+ except: return pd.DataFrame(), pd.DataFrame()
+
+df_p, df_k = load()
+
+# --- 3. MENU ---
+m = st.sidebar.radio("NAWIGACJA", ["📊 ANALIZA", "📦 ZAPASY", "⚙️ SYSTEM"])
+
+if m == "📊 ANALIZA":
+ st.title("RAPORTY OPERACYJNE")
+ if not df_p.empty:
+  c = st.columns(3)
+  c[0].metric("SKU", len(df_p))
+  c[1].metric("SZTUKI", int(df_p['liczba'].sum()))
+  c[2].metric("JAKOŚĆ", round(df_p['ocena'].mean(), 1))
+  f1 = px.pie(df_p, names='kn', values='liczba', hole=0.4, template="plotly_dark")
+  st.plotly_chart(f1, use_container_width=True)
+ else: st.warning("Baza pusta. Dodaj towar w module ZAPASY.")
+
+elif m == "📦 ZAPASY":
+ st.title("KONTROLA TOWARU")
+ t = st.tabs(["LISTA", "NOWA DOSTAWA"])
+ with t[0]:
+  if not df_p.empty:
+   st.dataframe(df_p[['nazwa','kn','liczba','ocena']], use_container_width=True)
+   if st.button("USUŃ OSTATNI"):
+    db.table("produkty").delete().eq("id", df_p.iloc[-1]['id']).execute()
+    st.rerun()
+ with t[1]:
+  with st.form("f1"):
+   n = st.text_input("NAZWA PRODUKTU")
+   g = st.selectbox("GRUPA", df_k['nazwa'].tolist() if not df_k.empty else ["?"])
+   l = st.number_input("ILOŚĆ", 1)
+   o = st.slider("JAKOŚĆ", 1, 5, 4)
+   if st.form_submit_button("ZATWIERDŹ DOSTAWĘ"):
+    ki = df_k[df_k['nazwa'] == g]['id'].values
