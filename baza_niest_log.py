@@ -3,71 +3,46 @@ from supabase import create_client
 import pandas as pd
 import plotly.express as px
 
-# 1. Konfiguracja strony i tła
-st.set_page_config(page_title="LOG-PRO 4.0", layout="wide", page_icon="📦")
+# 1. Konfiguracja strony
+st.set_page_config(page_title="LOG-PRO 5.0 | System Zarządzania", layout="wide", page_icon="🚚")
 
-def apply_custom_design():
-    st.markdown(f"""
+# 2. Stylizacja (Wyraźne czcionki i przyciski)
+def apply_ui_design():
+    st.markdown("""
     <style>
-    .stApp {{
-        background-image: linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.75)), 
-        url("https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=2070&auto=format&fit=crop");
+    .stApp {
+        background-image: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), 
+        url("https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=2070");
         background-attachment: fixed; background-size: cover;
-    }}
-    [data-testid="stMetricValue"], .stMarkdown p {{ color: white !important; }}
-    div[data-testid="stForm"] {{ 
-        background-color: rgba(0, 0, 0, 0.6); 
-        border-radius: 15px; padding: 20px; border: 1px solid #2e7d32; 
-    }}
+    }
+    /* Pogrubienie wszystkich etykiet i tekstów */
+    label, p, .stMetric, .stSelectbox, .stSlider {
+        color: white !important; font-weight: bold !important; font-size: 1.1rem !important;
+    }
+    /* Widoczne opisy przycisków */
+    .stButton>button {
+        border-radius: 20px; border: 2px solid #4CAF50;
+        background-color: #1b5e20; color: white !important;
+        font-weight: bold !important; width: 100%;
+    }
+    /* Stylizacja ramek formularzy */
+    div[data-testid="stForm"] {
+        background-color: rgba(0, 0, 0, 0.8);
+        border: 2px solid #2e7d32; border-radius: 15px; padding: 25px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-apply_custom_design()
+apply_ui_design()
 
-# 2. Połączenie z bazą Supabase
+# 3. Połączenie z bazą
 @st.cache_resource
 def init_db():
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 db = init_db()
 
-# 3. Funkcje pobierania danych
-def load_warehouse_data():
+# 4. Funkcje danych
+def get_warehouse_data():
     try:
-        p = db.table("produkty").select("*, kategorie(nazwa)").execute()
-        k = db.table("kategorie").select("*").execute()
-        df_p = pd.DataFrame(p.data)
-        if not df_p.empty:
-            df_p['kat_nazwa'] = df_p['kategorie'].apply(lambda x: x['nazwa'] if isinstance(x, dict) else "Inne")
-        return df_p, pd.DataFrame(k.data)
-    except:
-        return pd.DataFrame(), pd.DataFrame()
-
-df_prod, df_kat = load_warehouse_data()
-
-# 4. Główne Menu
-st.title("🌐 LOG-PRO: Warehouse Command Center")
-
-menu = st.sidebar.radio("Nawigacja", ["📊 Dashboard", "📦 Magazyn", "⚙️ Ustawienia"])
-
-if menu == "📊 Dashboard":
-    if not df_prod.empty:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Liczba SKU", len(df_prod))
-        c2.metric("Suma sztuk", int(df_prod['liczba'].sum()))
-        c3.metric("Śr. Jakość", f"{df_prod['ocena'].mean():.1f} ⭐")
-        
-        st.subheader("Struktura zapasów")
-        fig = px.bar(df_prod, x="kat_nazwa", y="liczba", color="ocena", template="dark")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Baza danych jest obecnie pusta.")
-
-elif menu == "📦 Magazyn":
-    t1, t2 = st.tabs(["Ewidencja", "Przyjęcie Towaru"])
-    
-    with t1:
-        if not df_prod.empty:
-            st.dataframe(df_prod[['nazwa', 'kat_nazwa', 'liczba', 'ocena']], use_container_width=True)
-            if st.button("Usuń pierwszy produkt z listy"):
-                db.table("produkty").delete
+        p = db.table("
