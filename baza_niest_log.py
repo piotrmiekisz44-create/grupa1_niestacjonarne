@@ -10,7 +10,6 @@ st.set_page_config(
 )
 
 # Inicjalizacja połączenia z Supabase
-# Pamiętaj o dodaniu SUPABASE_URL i SUPABASE_KEY w Secrets na Streamlit!
 @st.cache_resource
 def init_connection():
     url = st.secrets["SUPABASE_URL"]
@@ -19,11 +18,10 @@ def init_connection():
 
 supabase = init_connection()
 
-# 2. Pobieranie danych z cache (TTL 10 sekund dla płynności)
+# 2. Pobieranie danych z cache
 @st.cache_data(ttl=10)
 def fetch_warehouse_data():
     try:
-        # Pobieranie produktów z joinem do kategorii
         p_res = supabase.table("produkty").select("*, kategorie(nazwa)").execute()
         k_res = supabase.table("kategorie").select("*").execute()
         
@@ -49,20 +47,18 @@ with st.sidebar:
         ["📊 Dashboard", "📦 Produkty", "⚙️ Ustawienia Kategorii"]
     )
     st.divider()
-    st.caption("Status: Połączono z Supabase Cloud")
+    st.caption("Status: Połączono z Supabase")
 
 # --- MODUŁ 1: DASHBOARD ---
 if menu == "📊 Dashboard":
     st.header("📊 Statystyki Magazynowe")
     
     if not df_prod.empty:
-        # Metryki
         c1, c2, c3 = st.columns(3)
         c1.metric("Liczba Produktów", len(df_prod))
         c2.metric("Suma Sztuk", int(df_prod['liczba'].sum()))
         c3.metric("Średnia Ocena", f"{df_prod['ocena'].mean():.2f} ⭐")
         
-        # Wykresy
         col_left, col_right = st.columns(2)
         with col_left:
             st.subheader("Stany wg Kategorii")
@@ -71,7 +67,30 @@ if menu == "📊 Dashboard":
             st.subheader("Rozkład Ocen")
             st.area_chart(df_prod['ocena'].value_counts().sort_index())
     else:
-        st.info("Baza danych jest pusta. Dodaj kategorie i produkty.")
+        st.info("Baza danych jest pusta.")
 
-# --- MODUŁ 2: PRODUKTY ---
+# --- MODUŁ 2: PRODUKTY (Linia 77 - Tutaj był błąd) ---
 elif menu == "📦 Produkty":
+    st.header("📦 Zarządzanie Produktami")
+    
+    tab_list, tab_add = st.tabs(["📋 Przeglądaj", "➕ Dodaj Nowy"])
+    
+    with tab_list:
+        if not df_prod.empty:
+            df_display = df_prod[['nazwa', 'liczba', 'ocena', 'kat_nazwa']].copy()
+            df_display.columns = ['Nazwa', 'Liczba', 'Ocena', 'Kategoria']
+            st.dataframe(df_display, use_container_width=True, hide_index=True)
+            
+            with st.expander("Usuń produkt"):
+                to_del = st.selectbox("Wybierz produkt", df_prod['nazwa'].tolist())
+                if st.button("Usuń trwale", type="secondary"):
+                    id_d = df_prod[df_prod['nazwa'] == to_del]['id'].values[0]
+                    supabase.table("produkty").delete().eq("id", id_d).execute()
+                    st.cache_data.clear()
+                    st.rerun()
+        else:
+            st.write("Brak produktów.")
+
+    with tab_add:
+        if not df_kat.empty:
+            kat_map = {r['nazwa']: r['id'] for _, r in df_kat.
