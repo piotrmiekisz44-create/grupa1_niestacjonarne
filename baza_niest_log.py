@@ -3,48 +3,54 @@ from supabase import create_client
 import pandas as pd
 import plotly.express as px
 
-# 1. Połączenie (Supabase)
+# 1. Połączenie
 @st.cache_resource
 def init_db():
-    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
 db = init_db()
 
-# 2. Ładowanie danych
+# 2. Pobieranie danych
 def get_data():
     try:
-        p = db.table("produkty").select("*, kategorie(nazwa)").execute()
-        k = db.table("kategorie").select("*").execute()
-        df_p = pd.DataFrame(p.data)
+        p_req = db.table("produkty").select("*, kategorie(nazwa)").execute()
+        k_req = db.table("kategorie").select("*").execute()
+        df_p = pd.DataFrame(p_req.data)
+        df_k = pd.DataFrame(k_req.data)
         if not df_p.empty:
             df_p['kat_nazwa'] = df_p['kategorie'].apply(lambda x: x['nazwa'] if isinstance(x, dict) else "Inne")
-        return df_p, pd.DataFrame(k.data)
+        return df_p, df_k
     except:
         return pd.DataFrame(), pd.DataFrame()
 
 df_p, df_k = get_data()
 
-# 3. Interfejs Użytkownika
-st.set_page_config(page_title="LOG-PRO", layout="wide")
-st.title("🌐 LOG-PRO: Warehouse Command Center")
+# 3. Interfejs
+st.title("📡 LOG-PRO Terminal")
 
-page = st.sidebar.radio("Nawigacja", ["Raporty", "Magazyn", "System"])
+menu = st.sidebar.radio("Nawigacja", ["Dashboard", "Magazyn", "Ustawienia"])
 
-if page == "Raporty":
+if menu == "Dashboard":
     if not df_p.empty:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("SKU", len(df_p))
-        c2.metric("Sztuk", int(df_p['liczba'].sum()))
-        c3.metric("Jakość", f"{df_p['ocena'].mean():.1f}")
+        c1, c2 = st.columns(2)
+        c1.metric("Suma SKU", len(df_p))
+        c2.metric("Suma Sztuk", int(df_p['liczba'].sum()))
         
-        st.subheader("Struktura Kategorii")
-        fig = px.bar(df_p, x="kat_nazwa", y="liczba", color="ocena", template="dark")
+        fig = px.pie(df_p, values='liczba', names='kat_nazwa', title="Podział zapasów")
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Brak danych.")
+        st.info("Brak danych w bazie.")
 
-elif page == "Magazyn":
-    t1, t2 = st.tabs(["Ewidencja", "Przyjęcie Towaru"])
-    with t1:
+elif menu == "Magazyn":
+    st.subheader("Lista towarów")
+    if not df_p.empty:
         st.dataframe(df_p[['nazwa', 'kat_nazwa', 'liczba', 'ocena']], use_container_width=True)
-        if st.button("Usuń pierwszy produkt"):
+    
+    st.divider()
+    st.subheader("Dodaj nowy towar")
+    with st.form("dodaj"):
+        n = st.text_input("Nazwa")
+        k = st.selectbox("Kategoria", df_k['nazwa'].tolist() if not df_k.empty else ["Brak"])
+        l = st.number_input("
