@@ -3,21 +3,29 @@ from supabase import create_client
 import pandas as pd
 import plotly.express as px
 
-st.set_page_config(page_title="LOG-PRO 8.0", layout="wide")
+st.set_page_config(page_title="LOG-PRO 9.0", layout="wide")
 
-# CSS - Bardzo krótkie linie
-st.markdown("""<style>
-.stApp {background: linear-gradient(rgba(0,0,0,0.8),rgba(0,0,0,0.8)), url("https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=800"); background-size: cover;}
-label, p, .stMetric {color: white !important; font-weight: bold !important;}
-button {background: #00FF00 !important; color: black !important; font-weight: bold !important; border: 2px solid white !important;}
-</style>""", unsafe_allow_html=True)
+# 1. DESIGN: Maksymalna widoczność (Neonowe kolory i wielkie czcionki)
+st.markdown("""
+<style>
+.stApp { background-image: linear-gradient(rgba(0,0,0,0.85),rgba(0,0,0,0.85)), url("https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=2070"); background-size: cover; }
+h1, h2, h3, label, p, .stMetric { color: #00FF00 !important; font-weight: 900 !important; font-size: 1.3rem !important; text-shadow: 2px 2px 4px #000; }
+/* WIELKIE PRZYCISKI */
+div.stButton > button:first-child { 
+    background-color: #FFFF00 !important; color: #000 !important; font-size: 24px !important; 
+    font-weight: 900 !important; border: 4px solid #FF00FF !important; border-radius: 20px !important;
+    height: 80px !important; width: 100% !important; box-shadow: 0px 0px 15px #FF00FF;
+}
+div.stButton > button:first-child:hover { background-color: #FF00FF !important; color: white !important; }
+</style>
+""", unsafe_allow_html=True)
 
-# DB - Uproszczone nazwy
+# 2. POŁĄCZENIE
 @st.cache_resource
-def db_init():
+def init():
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
-db = db_init()
+db = init()
 
 def get_data():
     try:
@@ -25,48 +33,36 @@ def get_data():
         k = db.table("kategorie").select("*").execute()
         df = pd.DataFrame(p.data)
         if not df.empty:
-            df['k'] = df['kategorie'].apply(lambda x: x['nazwa'] if isinstance(x, dict) else "Inne")
+            df['kat'] = df['kategorie'].apply(lambda x: x['nazwa'] if isinstance(x, dict) else "Inne")
         return df, pd.DataFrame(k.data)
     except: return pd.DataFrame(), pd.DataFrame()
 
 df_p, df_k = get_data()
 
-# INTERFEJS
-st.title("🚢 LOG-PRO 8.0")
-pg = st.sidebar.radio("MENU", ["KPI", "SKU", "SET"])
+# 3. INTERFEJS
+st.title("🚢 LOG-PRO 9.0: WAREHOUSE COMMAND")
+m = st.sidebar.radio("MODUŁ:", ["📊 STATYSTYKI", "📦 MAGAZYN", "⚙️ USTAWIENIA"])
 
-if pg == "KPI":
+if m == "📊 STATYSTYKI":
     if not df_p.empty:
         c1, c2, c3 = st.columns(3)
         c1.metric("SKU", len(df_p))
-        c2.metric("SZT", int(df_p['liczba'].sum()))
-        c3.metric("OCENA", round(df_p['ocena'].mean(), 1))
-        st.plotly_chart(px.pie(df_p, names='k', values='liczba', hole=0.4, template="dark"))
-        st.plotly_chart(px.bar(df_p, x='k', y='liczba', color='ocena', template="dark"))
-    else: st.warning("Brak danych")
+        c2.metric("SZTUKI", int(df_p['liczba'].sum()))
+        c3.metric("JAKOŚĆ", f"{df_p['ocena'].mean():.1f}")
+        
+        # Bezpieczne wykresy statystyk
+        st.subheader("STRUKTURA ZAPASÓW")
+        fig1 = px.pie(df_p, names='kat', values='liczba', hole=0.4, template="dark")
+        st.plotly_chart(fig1, use_container_width=True)
+        
+        st.subheader("ANALIZA JAKOŚCI")
+        fig2 = px.bar(df_p, x='nazwa', y='liczba', color='ocena', template="dark")
+        st.plotly_chart(fig2, use_container_width=True)
+    else: st.warning("Baza jest pusta. Dodaj towar w zakładce MAGAZYN.")
 
-elif pg == "SKU":
-    t1, t2 = st.tabs(["LISTA", "DODAJ"])
+elif m == "📦 MAGAZYN":
+    t1, t2 = st.tabs(["🔍 STAN", "➕ DODAJ"])
     with t1:
         if not df_p.empty:
-            st.dataframe(df_p[['nazwa', 'k', 'liczba', 'ocena']], use_container_width=True)
-            if st.button("USUŃ"):
-                db.table("produkty").delete().eq("id", df_p.iloc[-1]['id']).execute()
-                st.rerun()
-    with t2:
-        with st.form("f1"):
-            n = st.text_input("NAZWA")
-            kg = st.selectbox("GRUPA", df_k['nazwa'].tolist() if not df_k.empty else ["?"])
-            l = st.number_input("ILOŚĆ", 1)
-            o = st.slider("JAKOŚĆ", 1, 5, 4)
-            if st.form_submit_button("ZAPISZ"):
-                ki = df_k[df_k['nazwa'] == kg]['id'].values[0]
-                db.table("produkty").insert({"nazwa":n, "kategoria_id":ki, "liczba":l, "ocena":o}).execute()
-                st.rerun()
-
-elif pg == "SET":
-    with st.form("f2"):
-        nk = st.text_input("NOWA GRUPA")
-        if st.form_submit_button("DODAJ"):
-            db.table("kategorie").insert({"nazwa": nk}).execute()
-            st.rerun()
+            st.dataframe(df_p[['nazwa', 'kat', 'liczba', 'ocena']], use_container_width=True)
+            if st.button
