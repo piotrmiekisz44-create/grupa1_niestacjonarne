@@ -2,115 +2,76 @@ import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
 
-# 1. Konfiguracja strony - Professional Look
+# 1. Konfiguracja strony
 st.set_page_config(
-    page_title="Warehouse Intelligence Pro",
+    page_title="Warehouse Manager Pro",
     page_icon="🏢",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# Inicjalizacja klienta Supabase
-url: str = st.secrets["SUPABASE_URL"]
-key: str = st.secrets["SUPABASE_KEY"]
-supabase: Client = create_client(url, key)
+# Inicjalizacja połączenia z Supabase
+# Pamiętaj o dodaniu SUPABASE_URL i SUPABASE_KEY w Secrets na Streamlit!
+@st.cache_resource
+def init_connection():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
-# 2. Funkcja pobierania danych (optymalizacja)
-@st.cache_data(ttl=60) # Odświeżanie cache co 60 sekund
-def get_data():
+supabase = init_connection()
+
+# 2. Pobieranie danych z cache (TTL 10 sekund dla płynności)
+@st.cache_data(ttl=10)
+def fetch_warehouse_data():
     try:
+        # Pobieranie produktów z joinem do kategorii
         p_res = supabase.table("produkty").select("*, kategorie(nazwa)").execute()
         k_res = supabase.table("kategorie").select("*").execute()
+        
         df_p = pd.DataFrame(p_res.data)
         df_k = pd.DataFrame(k_res.data)
+        
         if not df_p.empty and 'kategorie' in df_p.columns:
             df_p['kat_nazwa'] = df_p['kategorie'].apply(
-                lambda x: x['nazwa'] if isinstance(x, dict) else "Niezdefiniowana"
+                lambda x: x['nazwa'] if isinstance(x, dict) else "Brak"
             )
         return df_p, df_k
     except Exception:
         return pd.DataFrame(), pd.DataFrame()
 
-df_prod, df_kat = get_data()
+df_prod, df_kat = fetch_warehouse_data()
 
-# --- SIDEBAR: NAWIGACJA I FILTRY ---
+# --- SIDEBAR: NAWIGACJA ---
 with st.sidebar:
-    st.image("https://img.icons8.com/fluency/96/warehouse.png", width=80)
-    st.title("Menu Systemu")
+    st.image("https://img.icons8.com/fluency/96/box.png", width=60)
+    st.title("Warehouse Pro")
     menu = st.radio(
-        "Wybierz moduł:",
-        ["🏠 Pulpit Menadżera", "📦 Zarządzanie Produktami", "📁 Kategorie i Ustawienia"]
+        "Nawigacja:",
+        ["📊 Dashboard", "📦 Produkty", "⚙️ Ustawienia Kategorii"]
     )
     st.divider()
-    st.info("System połączony z bazą Supabase w chmurze.")
+    st.caption("Status: Połączono z Supabase Cloud")
 
-# --- MODUŁ 1: PULPIT MENADŻERA (DASHBOARD) ---
-if menu == "🏠 Pulpit Menadżera":
-    st.title("📊 Inteligentny Pulpit Magazynowy")
+# --- MODUŁ 1: DASHBOARD ---
+if menu == "📊 Dashboard":
+    st.header("📊 Statystyki Magazynowe")
     
     if not df_prod.empty:
-        # Metryki na górze
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Asortyment", len(df_prod))
-        m2.metric("Suma zapasów", int(df_prod['liczba'].sum()))
-        m3.metric("Średnia ocena", f"{df_prod['ocena'].mean():.2f} ⭐")
-        low_stock = len(df_prod[df_prod['liczba'] < 5])
-        m4.metric("Niski stan (<5)", low_stock, delta=-low_stock, delta_color="inverse")
-
-        st.divider()
+        # Metryki
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Liczba Produktów", len(df_prod))
+        c2.metric("Suma Sztuk", int(df_prod['liczba'].sum()))
+        c3.metric("Średnia Ocena", f"{df_prod['ocena'].mean():.2f} ⭐")
         
         # Wykresy
-        c1, c2 = st.columns(2)
-        with c1:
-            st.subheader("📦 Struktura zapasów")
-            chart_data = df_prod.groupby('kat_nazwa')['liczba'].sum()
-            st.bar_chart(chart_data, color="#1f77b4")
-        
-        with c2:
-            st.subheader("⭐ Ranking jakości")
-            avg_rating = df_prod.groupby('kat_nazwa')['ocena'].mean()
-            st.area_chart(avg_rating, color="#ff7f0e")
-            
-        
+        col_left, col_right = st.columns(2)
+        with col_left:
+            st.subheader("Stany wg Kategorii")
+            st.bar_chart(df_prod.groupby('kat_nazwa')['liczba'].sum())
+        with col_right:
+            st.subheader("Rozkład Ocen")
+            st.area_chart(df_prod['ocena'].value_counts().sort_index())
     else:
-        st.warning("Baza danych jest obecnie pusta. Dodaj pierwsze produkty.")
+        st.info("Baza danych jest pusta. Dodaj kategorie i produkty.")
 
-# --- MODUŁ 2: ZARZĄDZANIE PRODUKTAMI ---
-elif menu == "📦 Zarządzanie Produktami":
-    st.title("📦 Kontrola Inwentarza")
-    
-    # Przycisk odświeżania
-    if st.button("🔄 Odśwież dane"):
-        st.cache_data.clear()
-        st.rerun()
-
-    tab_view, tab_add = st.tabs(["🔍 Przeglądaj i Usuń", "➕ Dodaj Nowy Produkt"])
-
-    with tab_view:
-        if not df_prod.empty:
-            # Wyszukiwarka
-            search = st.text_input("Szukaj produktu po nazwie...", "")
-            filtered_df = df_prod[df_prod['nazwa'].str.contains(search, case=False)]
-            
-            # Tabela
-            df_v = filtered_df[['nazwa', 'liczba', 'ocena', 'kat_nazwa']].copy()
-            df_v.columns = ['Produkt', 'Ilość (szt.)', 'Ocena Jakości', 'Kategoria']
-            st.dataframe(df_v, use_container_width=True, hide_index=True)
-
-            # Akcja usuwania
-            with st.expander("Panel usuwania produktów"):
-                del_prod = st.selectbox("Wybierz produkt do wycofania:", df_prod['nazwa'].tolist())
-                if st.button("🔴 Usuń trwale z magazynu", type="secondary"):
-                    id_to_del = df_prod[df_prod['nazwa'] == del_prod]['id'].values[0]
-                    supabase.table("produkty").delete().eq("id", id_to_del).execute()
-                    st.cache_data.clear()
-                    st.success(f"Produkt {del_prod} został pomyślnie usunięty.")
-                    st.rerun()
-        else:
-            st.info("Brak produktów do wyświetlenia.")
-
-    with tab_add:
-        if not df_kat.empty:
-            kat_map = {row['nazwa']: row['id'] for _, row in df_kat.iterrows()}
-            with st.form("professional_add_form"):
-                col_
+# --- MODUŁ 2: PRODUKTY ---
+elif menu == "📦 Produkty":
