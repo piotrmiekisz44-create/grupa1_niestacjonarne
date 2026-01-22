@@ -4,37 +4,46 @@ import pandas as pd
 import plotly.express as px
 
 # 1. Konfiguracja strony
-st.set_page_config(page_title="LOG-PRO 5.0", layout="wide", page_icon="🚚")
+st.set_page_config(page_title="LOG-PRO 6.0", layout="wide", page_icon="🚚")
 
-# 2. Wyraźny Design (Białe, pogrubione czcionki i czytelne przyciski)
+# 2. DESIGN: Maksymalnie widoczne przyciski i czcionki
 st.markdown("""
 <style>
 .stApp {
-    background-image: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), 
+    background-image: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), 
     url("https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=2070");
     background-attachment: fixed; background-size: cover;
 }
-label, p, .stMetric, .stSelectbox, .stSlider {
-    color: white !important; font-weight: bold !important; font-size: 1.1rem !important;
+/* Pogrubienie wszystkich tekstów */
+label, p, .stMetric, .stSelectbox, .stSlider, h1, h2, h3 {
+    color: #FFFFFF !important; font-weight: 900 !important; text-shadow: 2px 2px 4px #000000;
 }
-.stButton>button {
-    border-radius: 10px; border: 2px solid #4CAF50;
-    background-color: #1b5e20; color: white !important;
-    font-weight: bold !important; width: 100%;
+/* PRZYCISKI: Jaskrawy zielony, duży, pogrubiony */
+div.stButton > button:first-child {
+    background-color: #00FF00 !important; color: #000000 !important;
+    font-size: 20px !important; font-weight: bold !important;
+    border: 3px solid #FFFFFF !important; border-radius: 15px !important;
+    height: 3em !important; transition: 0.3s;
 }
+div.stButton > button:first-child:hover {
+    background-color: #FF00FF !important; color: #FFFFFF !important; transform: scale(1.02);
+}
+/* PRZYCISK USUWANIA: Jaskrawy czerwony */
+.stButton button[kind="secondary"] {
+    background-color: #FF0000 !important; color: white !important;
+}
+/* Formularze */
 div[data-testid="stForm"] {
-    background-color: rgba(0, 0, 0, 0.7);
-    border: 2px solid #2e7d32; border-radius: 15px; padding: 20px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 4px solid #00FF00; border-radius: 20px; padding: 30px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. Połączenie i Dane
+# 3. Połączenie z Bazą
 @st.cache_resource
 def init_db():
-    u = st.secrets["SUPABASE_URL"]
-    k = st.secrets["SUPABASE_KEY"]
-    return create_client(u, k)
+    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 db = init_db()
 
@@ -51,60 +60,47 @@ def load_data():
 
 df_p, df_k = load_data()
 
-# 4. Menu Główne
-st.title("🚢 LOG-PRO: Global Logistic Command Center")
-page = st.sidebar.radio("MODUŁY SYSTEMU:", ["📊 Dashboard", "📦 Magazyn SKU", "📑 Raporty CSV", "⚙️ Ustawienia"])
+# 4. Główne Menu
+st.title("🚢 LOG-PRO 6.0: Warehouse Control")
+page = st.sidebar.radio("WYBIERZ MODUŁ:", ["📊 STATYSTYKI I WYKRESY", "📦 ZARZĄDZANIE ZASOBAMI", "⚙️ KONFIGURACJA"])
 
-# --- MODUŁ 1: DASHBOARD ---
-if page == "📊 Dashboard":
+# --- MODUŁ 1: STATYSTYKI ---
+if page == "📊 STATYSTYKI I WYKRESY":
     if not df_p.empty:
         c1, c2, c3 = st.columns(3)
-        c1.metric("SKU W BAZIE", len(df_p))
-        c2.metric("SUMA ZAPASÓW", int(df_p['liczba'].sum()))
-        c3.metric("ŚR. JAKOŚĆ", f"{df_p['ocena'].mean():.1f}/5")
+        c1.metric("SKU (ASORTYMENT)", len(df_p))
+        c2.metric("SUMA SZTUK", int(df_p['liczba'].sum()))
+        c3.metric("ŚREDNIA OCENA", f"{df_p['ocena'].mean():.2f}")
         
-        fig = px.pie(df_p, names='kat_nazwa', values='liczba', hole=0.4, template="dark")
-        st.plotly_chart(fig, use_container_width=True)
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.subheader("Struktura Kategorii (Kołowy)")
+            fig1 = px.pie(df_p, names='kat_nazwa', values='liczba', hole=0.4, template="dark")
+            st.plotly_chart(fig1, use_container_width=True)
+        with col_b:
+            st.subheader("Ilość Towaru wg Grupy (Słupkowy)")
+            fig2 = px.bar(df_p, x='kat_nazwa', y='liczba', color='ocena', template="dark")
+            st.plotly_chart(fig2, use_container_width=True)
     else:
-        st.info("Baza jest pusta. Dodaj towary w sekcji Magazyn.")
+        st.info("Baza jest pusta.")
 
-# --- MODUŁ 2: MAGAZYN SKU ---
-elif page == "📦 Magazyn SKU":
-    t1, t2 = st.tabs(["🔍 PODGLĄD STANU", "➕ NOWA DOSTAWA"])
+# --- MODUŁ 2: ZASOBY ---
+elif page == "📦 ZARZĄDZANIE ZASOBAMI":
+    tab1, tab2 = st.tabs(["🔍 PODGLĄD I USUWANIE", "➕ NOWA DOSTAWA"])
     
-    with t1:
+    with tab1:
         if not df_p.empty:
             st.dataframe(df_p[['nazwa', 'kat_nazwa', 'liczba', 'ocena']], use_container_width=True)
-            if st.button("USUŃ OSTATNIO DODANY PRODUKT"):
-                db.table("produkty").delete().eq("id", df_p.iloc[-1]['id']).execute()
+            st.markdown("---")
+            st.subheader("❌ STREFA USUWANIA")
+            target = st.selectbox("Wybierz towar do wycofania:", df_p['nazwa'].tolist())
+            if st.button("USUŃ WYBRANY TOWAR", kind="secondary"):
+                tid = df_p[df_p['nazwa'] == target]['id'].values[0]
+                db.table("produkty").delete().eq("id", tid).execute()
                 st.rerun()
         
-    with t2:
-        with st.form("fm_add"):
-            st.write("WPROWADŹ DANE DOSTAWY")
+    with tab2:
+        with st.form("dostawa_6"):
+            st.write("### FORMULARZ PRZYJĘCIA TOWARU")
             n = st.text_input("NAZWA TOWARU")
-            k = st.selectbox("GRUPA LOGISTYCZNA", df_k['nazwa'].tolist() if not df_k.empty else ["Brak"])
-            l = st.number_input("ILOŚĆ SZTUK", min_value=1)
-            o = st.slider("OCENA TECHNICZNA", 1, 5, 4)
-            if st.form_submit_button("ZATWIERDŹ PRZYJĘCIE"):
-                kid = df_k[df_k['nazwa'] == k]['id'].values[0]
-                db.table("produkty").insert({"nazwa": n, "kategoria_id": kid, "liczba": l, "ocena": o}).execute()
-                st.rerun()
-
-# --- MODUŁ 3: RAPORTY ---
-elif page == "📑 Raporty CSV":
-    st.subheader("Eksport danych magazynowych")
-    if not df_p.empty:
-        f_kat = st.multiselect("Filtruj grupy:", df_p['kat_nazwa'].unique())
-        df_f = df_p[df_p['kat_nazwa'].isin(f_kat)] if f_kat else df_p
-        st.dataframe(df_f, use_container_width=True)
-        st.download_button("POBIERZ PLIK CSV", df_f.to_csv(index=False), "log_pro_export.csv")
-
-# --- MODUŁ 4: USTAWIENIA ---
-elif page == "⚙️ Ustawienia":
-    st.subheader("Konfiguracja Kategorii")
-    with st.form("fm_sys"):
-        new_c = st.text_input("Nazwa nowej grupy logistycznej")
-        if st.form_submit_button("UTWÓRZ KATEGORIĘ"):
-            db.table("kategorie").insert({"nazwa": new_c}).execute()
-            st.rerun()
+            k = st.selectbox("
