@@ -73,4 +73,61 @@ if menu == "📊 Dashboard":
                          x='kat_nazwa', y='liczba', color='liczba',
                          title="Stany wg Kategorii", template="plotly_dark",
                          color_continuous_scale='Blues')
-            st.plotly_chart(fig1, use_container_
+            st.plotly_chart(fig1, use_container_width=True)
+        with col_r:
+            fig2 = px.pie(df_prod, names='kat_nazwa', values='liczba', hole=0.5,
+                         title="Udział Kategorii", template="plotly_dark")
+            st.plotly_chart(fig2, use_container_width=True)
+
+elif menu == "📦 Inwentarz":
+    st.title("📦 Kontrola i Ewidencja")
+    t1, t2 = st.tabs(["📋 Lista Produktów", "📥 Nowa Dostawa"])
+    with t1:
+        search = st.text_input("Szukaj produktu...")
+        if not df_prod.empty:
+            df_f = df_prod[df_prod['nazwa'].str.contains(search, case=False)]
+            st.dataframe(df_f[['nazwa', 'kat_nazwa', 'liczba', 'ocena']], 
+                         use_container_width=True, hide_index=True)
+            with st.expander("Usuń produkt"):
+                target = st.selectbox("Wybierz pozycję", df_prod['nazwa'].tolist())
+                if st.button("USUŃ Z BAZY", type="primary"):
+                    id_d = df_prod[df_prod['nazwa'] == target]['id'].values[0]
+                    supabase.table("produkty").delete().eq("id", id_d).execute()
+                    st.cache_data.clear()
+                    st.rerun()
+    with t2:
+        if not df_kat.empty:
+            k_map = {r['nazwa']: r['id'] for _, r in df_kat.iterrows()}
+            with st.form("add_p", clear_on_submit=True):
+                ca, cb = st.columns(2)
+                n = ca.text_input("Nazwa")
+                k = cb.selectbox("Kategoria", options=list(k_map.keys()))
+                l = st.number_input("Ilość", min_value=0)
+                o = st.slider("Ocena", 0.0, 5.0, 4.0)
+                if st.form_submit_button("WPROWADŹ", use_container_width=True):
+                    supabase.table("produkty").insert({"nazwa": n, "liczba": l, "ocena": o, "kategoria_id": k_map[k]}).execute()
+                    st.cache_data.clear()
+                    st.rerun()
+
+elif menu == "📈 Predykcja":
+    st.title("📈 Analiza Jakościowa")
+    if not df_prod.empty:
+        fig3 = px.scatter(df_prod, x="liczba", y="ocena", color="kat_nazwa", 
+                         size="liczba", hover_name="nazwa", template="plotly_dark",
+                         title="Mapa: Ilość vs Jakość")
+        st.plotly_chart(fig3, use_container_width=True)
+
+elif menu == "⚙️ Baza":
+    st.title("⚙️ Architektura Bazy")
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        with st.form("add_k"):
+            nk = st.text_input("Nowa Kategoria")
+            ok = st.text_area("Opis")
+            if st.form_submit_button("DODAJ GRUPĘ"):
+                if nk:
+                    supabase.table("kategorie").insert({"nazwa": nk, "opis": ok}).execute()
+                    st.cache_data.clear()
+                    st.rerun()
+    with col2:
+        st.table(df_kat[['nazwa', 'opis']])
