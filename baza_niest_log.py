@@ -31,7 +31,6 @@ st.title("➕ Dodaj nowy produkt do bazy")
 if not df_kat.empty:
     kat_options = {row['nazwa']: row['id'] for _, row in df_kat.iterrows()}
     
-    # Formularz w ramce (container), aby oddzielić go od reszty
     with st.container(border=True):
         with st.form("main_add_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
@@ -42,28 +41,4 @@ if not df_kat.empty:
                 l_prod = st.number_input("Ilość", min_value=0, step=1)
                 o_prod = st.slider("Ocena (0-5)", 0.0, 5.0, 4.0, 0.1)
             
-            submit = st.form_submit_button("Zapisz produkt w magazynie", use_container_width=True, type="primary")
-            
-            if submit:
-                if n_prod:
-                    supabase.table("produkty").insert({
-                        "nazwa": n_prod, "liczba": l_prod, 
-                        "ocena": o_prod, "kategoria_id": kat_options[k_prod]
-                    }).execute()
-                    st.success(f"Pomyślnie dodano: {n_prod}")
-                    st.rerun()
-                else:
-                    st.error("Musisz podać nazwę produktu!")
-else:
-    st.warning("⚠️ Baza kategorii jest pusta. Dodaj kategorię w zakładce 'Ustawienia', aby móc dodawać produkty.")
-
-st.divider()
-
-# --- ZAKŁADKI Z ANALIZĄ I WYKRESAMI ---
-tab_list, tab_charts, tab_settings = st.tabs(["📋 Lista Produktów", "📊 Wykresy i Statystyki", "⚙️ Ustawienia Kategorii"])
-
-with tab_list:
-    st.subheader("Aktualne stany magazynowe")
-    if not df_prod.empty:
-        df_view = df_prod[['nazwa', 'liczba', 'ocena', 'kat_nazwa']].copy()
-        df_view.columns = ['Produkt', 'Ilość', 'Ocena
+            submit = st.form_submit_button("Zapisz produkt w magazynie", use_container_width=True, type="
