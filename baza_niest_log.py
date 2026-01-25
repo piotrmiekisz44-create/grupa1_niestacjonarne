@@ -53,4 +53,22 @@ st.markdown("""
         color: #000000 !important;
         border: 2px solid #00ff88 !important;
         border-radius: 8px !important;
-        font-weight:
+        font-weight: 600 !important;
+    }
+
+    /* Metryki */
+    [data-testid="stMetric"] {
+        background: #ffffff;
+        border-left: 5px solid #00ff88;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
+    }
+
+    /* Przyciski */
+    .stButton>button {
+        background-color: #00ff88 !important;
+        color: #000000 !important;
+        font-weight: 900 !important;
+        border-radius: 10px !important;
+        border: 2px solid #000000 !important;
