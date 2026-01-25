@@ -1,88 +1,224 @@
 import streamlit as st
-from supabase import create_client
+from supabase import create_client, Client
 import pandas as pd
 import plotly.express as px
 
-st.set_page_config(page_title="LOG-PRO 18", layout="wide")
+# --- KONFIGURACJA STRONY ---
+st.set_page_config(
+    page_title="LOG-PRO: System Logistyczny", 
+    page_icon="🚢", 
+    layout="wide"
+)
 
-# --- 1. STYLIZACJA (CZARNE POLA I NEONY) ---
-st.markdown("""<style>
-.stApp {background:#000; color:#0f8;}
-[data-testid="stSidebar"] {background:#050505 !important; border-right:2px solid #0f8;}
-h1,h2,label,p,.stMetric {color:#0f8 !important; font-weight:900;}
-/* CZARNE POLA TEKSTOWE */
-input, textarea, div[data-baseweb="select"] > div {
- background:#000 !important; color:#fff !important;
- border:2px solid #0f8 !important; border-radius:8px !important;
- font-weight:bold !important;
-}
-/* GIGANTYCZNE ŻÓŁTE PRZYCISKI */
-button {
- background:#ff0 !important; color:#000 !important;
- font-size:22px !important; font-weight:900 !important;
- height:75px !important; border-radius:15px !important;
- border:3px solid #0f8 !important; width:100% !important;
-}
-</style>""", unsafe_allow_html=True)
+# --- STYLIZACJA CSS (ZAKCENTOWANE POLA TEKSTOWE) ---
+st.markdown("""
+    <style>
+    /* Tło i główny kontener */
+    .stApp {
+        background-image: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), 
+        url("https://images.unsplash.com/photo-1494412519320-aa613dfb7738?q=80&w=2070");
+        background-attachment: fixed;
+        background-size: cover;
+    }
 
-# --- 2. POŁĄCZENIE ---
+    /* Panele i kontenery */
+    [data-testid="stSidebar"] {
+        background-color: #050505 !important;
+        border-right: 2px solid #00ff88;
+    }
+    
+    .main .block-container {
+        background-color: rgba(0, 0, 0, 0.92);
+        padding: 40px;
+        border-radius: 20px;
+        border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+
+    /* Teksty ogólne */
+    html, body, [class*="st-"] {
+        font-family: 'Segoe UI', sans-serif;
+        color: #FFFFFF !important;
+    }
+
+    h1, h2, h3 { 
+        color: #00ff88 !important; 
+        text-transform: uppercase;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    }
+
+    /* KLUCZOWE: Stylizacja pól tekstowych i liczbowych */
+    input, textarea, select, div[data-baseweb="select"] > div {
+        background-color: #000000 !important;
+        color: #FFFFFF !important;
+        border: 2px solid #00ff88 !important;
+        border-radius: 8px !important;
+        font-weight: bold !important;
+        font-size: 16px !important;
+    }
+
+    /* Stylizacja etykiet nad polami (Label) */
+    .stMarkdown p, label {
+        color: #00ff88 !important;
+        font-weight: 700 !important;
+        font-size: 1.1rem !important;
+    }
+
+    /* Fokus na polach (po kliknięciu) */
+    input:focus, textarea:focus {
+        border-color: #00d4ff !important;
+        box-shadow: 0 0 10px #00d4ff !important;
+    }
+
+    /* Metryki */
+    [data-testid="stMetric"] {
+        background: #111;
+        border: 2px solid #00ff88;
+        border-radius: 12px;
+        padding: 15px;
+    }
+
+    /* Przyciski */
+    .stButton>button {
+        background-color: #00ff88 !important;
+        color: #000000 !important;
+        font-weight: 900 !important;
+        border-radius: 10px !important;
+        border: none !important;
+        transition: 0.3s;
+    }
+    .stButton>button:hover {
+        background-color: #00d4ff !important;
+        transform: scale(1.02);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- POŁĄCZENIE Z BAZĄ ---
 @st.cache_resource
-def init():
- u, k = st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
- return create_client(u, k)
+def init_db():
+    try:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        return create_client(url, key)
+    except Exception as e:
+        st.error(f"Błąd połączenia: {e}")
+        return None
 
-db = init()
+supabase = init_db()
 
-def load():
- try:
-  p = db.table("produkty").select("*, kategorie(nazwa)").execute()
-  k = db.table("kategorie").select("*").execute()
-  df = pd.DataFrame(p.data)
-  if not df.empty:
-   df['kn'] = df['kategorie'].apply(lambda x: x['nazwa'] if isinstance(x, dict) else "Inne")
-  return df, pd.DataFrame(k.data)
- except: return pd.DataFrame(), pd.DataFrame()
+# --- POBIERANIE DANYCH ---
+@st.cache_data(ttl=5)
+def get_data():
+    if not supabase: 
+        return pd.DataFrame(), pd.DataFrame()
+    try:
+        p_res = supabase.table("produkty").select("*, kategorie(nazwa)").execute()
+        k_res = supabase.table("kategorie").select("*").execute()
+        df_p = pd.DataFrame(p_res.data)
+        df_k = pd.DataFrame(k_res.data)
+        
+        if not df_p.empty and 'kategorie' in df_p.columns:
+            df_p['kat_nazwa'] = df_p['kategorie'].apply(
+                lambda x: x['nazwa'] if isinstance(x, dict) else "Brak"
+            )
+        return df_p, df_k
+    except Exception:
+        return pd.DataFrame(), pd.DataFrame()
 
-df_p, df_k = load()
+df_prod, df_kat = get_data()
 
-# --- 3. MENU ---
-m = st.sidebar.radio("NAWIGACJA", ["📊 ANALIZA", "📦 ZAPASY", "⚙️ SYSTEM"])
+# --- SIDEBAR ---
+with st.sidebar:
+    st.markdown("<h1 style='text-align: center;'>🚢 LOG-PRO</h1>", unsafe_allow_html=True)
+    menu = st.radio(
+        "WYBIERZ MODUŁ:", 
+        ["📊 Dashboard", "📦 Inwentarz", "⚙️ Konfiguracja"]
+    )
+    st.divider()
+    st.success("STATUS: POŁĄCZONO")
 
-if m == "📊 ANALIZA":
- st.title("RAPORTY OPERACYJNE")
- if not df_p.empty:
-  c = st.columns(3)
-  c[0].metric("SKU", len(df_p))
-  c[1].metric("SZTUKI", int(df_p['liczba'].sum()))
-  c[2].metric("JAKOŚĆ", round(df_p['ocena'].mean(), 1))
-  f1 = px.pie(df_p, names='kn', values='liczba', hole=0.4, template="plotly_dark")
-  st.plotly_chart(f1, use_container_width=True)
- else: st.warning("Baza pusta. Dodaj towar w module ZAPASY.")
+# --- MODUŁ 1: DASHBOARD ---
+if menu == "📊 Dashboard":
+    st.title("📊 Statystyki Magazynowe")
+    if not df_prod.empty:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Pozycje (SKU)", len(df_prod))
+        c2.metric("Suma Sztuk", int(df_prod['liczba'].sum()))
+        c3.metric("Średnia Jakość", f"{df_prod['ocena'].mean():.2f}")
 
-elif m == "📦 ZAPASY":
- st.title("KONTROLA TOWARU")
- t = st.tabs(["LISTA", "NOWA DOSTAWA"])
- with t[0]:
-  if not df_p.empty:
-   st.dataframe(df_p[['nazwa','kn','liczba','ocena']], use_container_width=True)
-   if st.button("USUŃ OSTATNI"):
-    db.table("produkty").delete().eq("id", df_p.iloc[-1]['id']).execute()
-    st.rerun()
- with t[1]:
-  with st.form("f1"):
-   n = st.text_input("NAZWA PRODUKTU")
-   g = st.selectbox("GRUPA", df_k['nazwa'].tolist() if not df_k.empty else ["?"])
-   l = st.number_input("ILOŚĆ", 1)
-   o = st.slider("JAKOŚĆ", 1, 5, 4)
-   if st.form_submit_button("ZATWIERDŹ DOSTAWĘ"):
-    ki = df_k[df_k['nazwa'] == g]['id'].values[0]
-    db.table("produkty").insert({"nazwa":n,"kategoria_id":ki,"liczba":l,"ocena":o}).execute()
-    st.rerun()
+        st.divider()
+        col_l, col_r = st.columns(2)
+        with col_l:
+            fig1 = px.bar(
+                df_prod.groupby('kat_nazwa')['liczba'].sum().reset_index(), 
+                x='kat_nazwa', y='liczba', color='liczba',
+                template="plotly_dark", title="Stany wg Kategorii"
+            )
+            st.plotly_chart(fig1, use_container_width=True)
+        with col_r:
+            fig2 = px.pie(
+                df_prod, names='kat_nazwa', values='liczba', hole=0.5,
+                template="plotly_dark", title="Udział w Inwentarzu"
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+    else:
+        st.info("Baza danych jest pusta.")
 
-elif m == "⚙️ SYSTEM":
- st.title("KONFIGURACJA")
- with st.form("f2"):
-  nk = st.text_input("NOWA KATEGORIA")
-  if st.form_submit_button("DODAJ DO SYSTEMU"):
-   db.table("kategorie").insert({"nazwa": nk}).execute()
-   st.rerun()
+# --- MODUŁ 2: INWENTARZ ---
+elif menu == "📦 Inwentarz":
+    st.title("📦 Zarządzanie Towarem")
+    t1, t2 = st.tabs(["🔍 Lista i Wyszukiwanie", "📥 Przyjęcie Nowej Dostawy"])
+    
+    with t1:
+        search = st.text_input("Wpisz nazwę produktu, aby przefiltrować listę:")
+        if not df_prod.empty:
+            df_f = df_prod[df_prod['nazwa'].str.contains(search, case=False)]
+            st.dataframe(df_f[['nazwa', 'kat_nazwa', 'liczba', 'ocena']], use_container_width=True, hide_index=True)
+            
+            with st.expander("🗑️ Procedura usuwania produktu"):
+                target = st.selectbox("Wybierz artykuł do usunięcia z ewidencji:", df_prod['nazwa'].tolist())
+                if st.button("DEFINITYWNIE USUŃ", type="primary", use_container_width=True):
+                    id_to_del = df_prod[df_prod['nazwa'] == target]['id'].values[0]
+                    supabase.table("produkty").delete().eq("id", id_to_del).execute()
+                    st.cache_data.clear()
+                    st.rerun()
+
+    with t2:
+        if not df_kat.empty:
+            k_map = {r['nazwa']: r['id'] for _, r in df_kat.iterrows()}
+            with st.form("dostawa_form"):
+                ca, cb = st.columns(2)
+                p_n = ca.text_input("Dokładna nazwa produktu")
+                p_k = cb.selectbox("Przypisana kategoria", options=list(k_map.keys()))
+                cc, cd = st.columns(2)
+                p_q = cc.number_input("Ilość przyjmowanych jednostek", min_value=1)
+                p_o = cd.slider("Ocena jakości towaru (0-5)", 0.0, 5.0, 4.0)
+                if st.form_submit_button("ZATWIERDŹ PRZYJĘCIE TOWARU", use_container_width=True):
+                    if p_n:
+                        supabase.table("produkty").insert({
+                            "nazwa": p_n, "liczba": p_q, 
+                            "ocena": p_o, "kategoria_id": k_map[p_k]
+                        }).execute()
+                        st.cache_data.clear()
+                        st.rerun()
+        else:
+            st.warning("Błąd: System nie wykrył żadnych kategorii. Dodaj je w module Konfiguracja.")
+
+# --- MODUŁ 3: KONFIGURACJA ---
+elif menu == "⚙️ Konfiguracja":
+    st.title("⚙️ Ustawienia Struktury")
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        with st.form("kat_form"):
+            st.write("Definiowanie nowej grupy towarowej")
+            nk = st.text_input("Nazwa kategorii (np. Elektronika)")
+            ok = st.text_area("Szczegółowy opis grupy")
+            if st.form_submit_button("DODAJ GRUPĘ DO SYSTEMU"):
+                if nk:
+                    supabase.table("kategorie").insert({"nazwa": nk, "opis": ok}).execute()
+                    st.cache_data.clear()
+                    st.rerun()
+    with col2:
+        st.write("Istniejące kategorie w systemie:")
+        if not df_kat.empty:
+            st.table(df_kat[['nazwa', 'opis']])
