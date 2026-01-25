@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STYLIZACJA CSS (CZARNE CZCIONKI I JASNA CZYTELNOŚĆ) ---
+# --- STYLIZACJA CSS (CZARNE CZCIONKI, JASNE TŁA I GRANATOWE AKCENTY) ---
 st.markdown("""
     <style>
     /* Tło i główny kontener */
@@ -21,10 +21,10 @@ st.markdown("""
         background-size: cover;
     }
 
-    /* Panele i kontenery */
+    /* Panele i kontenery - Granatowy akcent na krawędziach */
     [data-testid="stSidebar"] {
         background-color: #f8f9fa !important;
-        border-right: 3px solid #00ff88;
+        border-right: 3px solid #1c3d6e; /* Granatowa linia boczna */
     }
     
     .main .block-container {
@@ -35,44 +35,48 @@ st.markdown("""
         box-shadow: 0 10px 25px rgba(0,0,0,0.1);
     }
 
-    /* WYMUSZENIE CZARNEJ CZCIONKI DLA WSZYSTKIEGO */
+    /* GLOBALNE WYMUSZENIE CZARNEJ CZCIONKI */
     html, body, [class*="st-"], .stMarkdown p, label, .stMetric div, h1, h2, h3 {
         font-family: 'Segoe UI', sans-serif;
         color: #000000 !important;
     }
 
     h1, h2, h3 { 
-        color: #000000 !important;
+        color: #1c3d6e !important; /* Nagłówki w kolorze granatowym */
         text-transform: uppercase;
         font-weight: 800;
     }
 
-    /* Pola wprowadzania danych */
+    /* Pola wprowadzania danych - Granatowe obramowanie */
     input, textarea, select, div[data-baseweb="select"] > div {
         background-color: #ffffff !important;
         color: #000000 !important;
-        border: 2px solid #00ff88 !important;
+        border: 2px solid #1c3d6e !important;
         border-radius: 8px !important;
         font-weight: 600 !important;
     }
 
-    /* Metryki */
+    /* Metryki - Granatowy pasek z boku */
     [data-testid="stMetric"] {
         background: #ffffff;
-        border-left: 5px solid #00ff88;
+        border-left: 5px solid #1c3d6e;
         border-radius: 8px;
         padding: 15px;
         box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
     }
 
-    /* Przyciski */
+    /* Przyciski - Granatowe tło, biały tekst */
     .stButton>button {
-        background-color: #00ff88 !important;
-        color: #000000 !important;
-        font-weight: 900 !important;
+        background-color: #1c3d6e !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
         border-radius: 10px !important;
-        border: 2px solid #000000 !important;
+        border: none !important;
         transition: 0.3s;
+    }
+    .stButton>button:hover {
+        background-color: #2a5699 !important;
+        box-shadow: 0 4px 12px rgba(28, 61, 110, 0.3);
     }
 
     /* Tabele */
@@ -119,13 +123,13 @@ df_prod, df_kat = get_data()
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.markdown("<h1 style='text-align: center; color: black !important;'>🚢 LOG-PRO</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #1c3d6e !important;'>🚢 LOG-PRO</h1>", unsafe_allow_html=True)
     menu = st.radio(
         "WYBIERZ MODUŁ:", 
         ["📊 Dashboard", "📦 Inwentarz", "⚙️ Konfiguracja"]
     )
     st.divider()
-    st.success("STATUS: POŁĄCZONO")
+    st.info("STATUS: POŁĄCZONO")
 
 # --- MODUŁ 1: DASHBOARD ---
 if menu == "📊 Dashboard":
@@ -142,13 +146,15 @@ if menu == "📊 Dashboard":
             fig1 = px.bar(
                 df_prod.groupby('kat_nazwa')['liczba'].sum().reset_index(), 
                 x='kat_nazwa', y='liczba', color='liczba',
-                template="plotly_white", title="Stany wg Kategorii"
+                template="plotly_white", title="Stany wg Kategorii",
+                color_continuous_scale='Blues'
             )
             st.plotly_chart(fig1, use_container_width=True)
         with col_r:
             fig2 = px.pie(
                 df_prod, names='kat_nazwa', values='liczba', hole=0.5,
-                template="plotly_white", title="Udział w Inwentarzu"
+                template="plotly_white", title="Udział w Inwentarzu",
+                color_discrete_sequence=px.colors.sequential.Blues_r
             )
             st.plotly_chart(fig2, use_container_width=True)
     else:
@@ -167,7 +173,7 @@ elif menu == "📦 Inwentarz":
             
             with st.expander("🗑️ Procedura usuwania produktu"):
                 target = st.selectbox("Wybierz artykuł do usunięcia z ewidencji:", df_prod['nazwa'].tolist())
-                if st.button("DEFINITYWNIE USUŃ", type="primary", use_container_width=True):
+                if st.button("DEFINITYWNIE USUŃ", type="secondary", use_container_width=True):
                     id_to_del = df_prod[df_prod['nazwa'] == target]['id'].values[0]
                     supabase.table("produkty").delete().eq("id", id_to_del).execute()
                     st.cache_data.clear()
